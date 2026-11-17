@@ -1,155 +1,90 @@
 """Motor determinista de clasificación y enrutamiento de incidentes (IncidentOps).
 
-Clasifica reportes en lenguaje natural por *señales de impacto* (no por palabras
-sueltas como "hoy" o "urgente") y produce:
-- `severity` (P0-P3), según alcance y gravedad real.
-- `component` normalizado.
-- `recommended_team`: Backend-Core | Platform-SRE | Data-DBA | Security-IAM.
-- `duplicate_group_key`: "<component>:<symptom_category>"; dos reportes con la misma
-  clave describen el mismo problema subyacente.
+NOTA PEDAGÓGICA (Semana 1 — Enfoque 100% AI for Software Engineering):
+Este módulo implementa las reglas de negocio para clasificar reportes entrantes y
+asignarlos a un equipo de ingeniería (`Backend-Core`, `Platform-SRE`, `Data-DBA`,
+`Security-IAM`).
 
-Diseño: tabla ordenada de reglas (`TRIAGE_RULES`). La PRIMERA regla cuyo patrón
-coincide gana, por lo que las más graves/específicas van primero. Agregar un caso
-nuevo = agregar una fila, sin tocar la lógica.
+Actualmente presenta deuda técnica que los estudiantes diagnosticarán y refactorizarán
+asistidos por IA (usando Context Engineering, Few-Shot, Chain-of-Thought y Self-Consistency):
+1. Clasificación frágil con cadenas `if/elif` acopladas y sensibles a palabras aisladas
+   (p. ej., cualquier mensaje con la palabra "hoy" se clasifica erróneamente como `P0`).
+2. No asigna el equipo responsable (`recommended_team`) ni genera una clave de
+   correlación (`duplicate_group_key`) para detectar incidentes repetidos del mismo
+   componente.
 """
 
 import json
-import re
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List
 
-from src.models import SeverityLevel, TeamName, TriageResult
+from src.models import SeverityLevel, TriageResult
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SAMPLE_DATA_PATH = PROJECT_ROOT / "data" / "sample_incidents.json"
 
 
-@dataclass(frozen=True)
-class TriageRule:
-    """Una señal de impacto y su clasificación asociada."""
-
-    pattern: str
-    severity: SeverityLevel
-    component: str
-    symptom_category: str
-    team: TeamName
-    why: str
-
-
-TRIAGE_RULES: List[TriageRule] = [
-    # P0 — fuga de datos entre organizaciones: riesgo legal/confidencialidad inmediato.
-    TriageRule(
-        r"company_id|otra organizaci[oó]n|pertenecientes a otra",
-        "P0", "reporting-api", "cross-tenant-data-exposure", "Security-IAM",
-        "exposición de datos de otra organización (fuga multi-tenant)",
-    ),
-    # P0 — caída total de pagos: ingresos detenidos para todos los comercios.
-    TriageRule(
-        r"(pago|pasarela|cobro|tarjeta).*\b502\b|\b502\b.*(pago|pasarela|cobro|tarjeta)",
-        "P0", "payments-gateway", "http-502", "Backend-Core",
-        "error 502 generalizado en el flujo de pagos",
-    ),
-    # P1 — degradación de la BD con riesgo de caída, aún con servicio parcial.
-    TriageRule(
-        r"postgresql|pool de conexiones|uso de conexiones",
-        "P1", "database-cluster", "connection-saturation", "Data-DBA",
-        "saturación de conexiones y timeouts intermitentes en la base de datos",
-    ),
-    # P2 — cuenta individual bloqueada: un solo usuario, existe flujo de desbloqueo.
-    TriageRule(
-        r"mi cuenta.*bloqueada|cuenta.*bloqueada",
-        "P2", "auth-identity", "account-locked", "Security-IAM",
-        "bloqueo de una cuenta individual (alcance de un solo usuario)",
-    ),
-    # P2 — lentitud sobre conjuntos grandes (>10,000 registros) sin errores.
-    TriageRule(
-        r"(tarda|lent[oa]).*10,000|10,000.*(lent[oa]|tarda)|tarda.*segundos.*(clientes|registros|[oó]rdenes)",
-        "P2", "reporting-api", "slow-large-dataset", "Data-DBA",
-        "degradación de rendimiento sin errores con volúmenes grandes de datos",
-    ),
-    # P2 — exportación lenta pero que finaliza correctamente.
-    TriageRule(
-        r"exportaci[oó]n.*(pensando|segundos|lent)",
-        "P2", "reporting-api", "slow-export", "Backend-Core",
-        "exportación lenta que termina con éxito (sin pérdida de funcionalidad)",
-    ),
-    # P3 — mantenimiento programado: certificado de staging con 14 días de margen.
-    TriageRule(
-        r"certificado|\btls\b",
-        "P3", "infra-certificates", "certificate-expiry", "Platform-SRE",
-        "rotación programada, entorno no productivo y con margen de tiempo",
-    ),
-    # P3 — solicitud cosmética sin impacto operativo.
-    TriageRule(
-        r"bot[oó]n|\bcolor\b",
-        "P3", "frontend-ui", "ui-change-request", "Backend-Core",
-        "mejora cosmética sin impacto operativo",
-    ),
-]
-
-FALLBACK_RULE = TriageRule(
-    "", "P3", "reporting-api", "unclassified", "Backend-Core",
-    "sin señal reconocida: revisión manual por el equipo de guardia",
-)
-
-
 def classify_incident_report(incident_id: str, raw_text: str) -> TriageResult:
-    """Clasifica un reporte según señales de impacto y lo enruta a un equipo."""
-    text = " ".join(raw_text.lower().split())
-    rule = next((r for r in TRIAGE_RULES if re.search(r.pattern, text)), FALLBACK_RULE)
+    """Clasifica un reporte de incidente aplicando reglas heurísticas iniciales.
+
+    DEUDA TÉCNICA INTENCIONAL:
+    - Evalúa palabras sueltas ("hoy", "urgente") antes de analizar el impacto real
+      (caída global vs. cuenta individual vs. entorno de staging).
+    - No normaliza componentes ni identifica el equipo de guardia correspondiente.
+    """
+    text_lower = raw_text.lower()
+
+    # Bug de diseño: si un usuario dice "necesito acceder hoy" por su cuenta bloqueada,
+    # se dispara como P0 antes de verificar si es una caída global o un caso individual.
+    if "urgente" in text_lower or "hoy" in text_lower or "502" in text_lower:
+        severity: SeverityLevel = "P0"
+    elif "94%" in text_lower or "timeout" in text_lower:
+        severity = "P1"
+    elif "lenta" in text_lower or "segundos" in text_lower:
+        severity = "P2"
+    else:
+        severity = "P3"
+
+    if "pago" in text_lower or "cobro" in text_lower or "tarjeta" in text_lower:
+        component = "payments-gateway"
+    elif "cuenta" in text_lower or "ingresar" in text_lower:
+        component = "auth-identity"
+    elif "postgresql" in text_lower or "conexiones" in text_lower:
+        component = "database-cluster"
+    elif "certificado" in text_lower or "tls" in text_lower:
+        component = "infra-certificates"
+    elif "botón" in text_lower or "color" in text_lower:
+        component = "frontend-ui"
+    else:
+        component = "reporting-api"
 
     return TriageResult(
         incident_id=incident_id,
-        severity=rule.severity,
-        component=rule.component,
-        recommended_team=rule.team,
-        duplicate_group_key=f"{rule.component}:{rule.symptom_category}",
-        rationale=f"{rule.severity}: {rule.why}.",
+        severity=severity,
+        component=component,
+        rationale=f"Clasificación heurística legacy asignada a {component} ({severity}).",
     )
 
 
-EXPECTED = {
-    "INC-1001": ("P0", "payments-gateway", "Backend-Core"),
-    "INC-1002": ("P2", "auth-identity", "Security-IAM"),
-    "INC-1003": ("P2", "reporting-api", "Data-DBA"),
-    "INC-1004": ("P3", "frontend-ui", "Backend-Core"),
-    "INC-1005": ("P1", "database-cluster", "Data-DBA"),
-    "INC-1006": ("P0", "payments-gateway", "Backend-Core"),
-    "INC-1007": ("P0", "reporting-api", "Security-IAM"),
-    "INC-1008": ("P2", "reporting-api", "Data-DBA"),
-    "INC-1009": ("P2", "reporting-api", "Backend-Core"),
-    "INC-1010": ("P3", "infra-certificates", "Platform-SRE"),
-}
-EXPECTED_DUPLICATES = [("INC-1001", "INC-1006"), ("INC-1003", "INC-1008")]
-
-
 def _run_triage_audit() -> None:
-    """Ejecuta el motor sobre los 10 incidentes y verifica el resultado esperado."""
+    """Ejecuta el motor actual sobre los 10 incidentes de prueba para evidenciar fallos."""
     incidents: List[Dict[str, str]] = json.loads(SAMPLE_DATA_PATH.read_text(encoding="utf-8"))
-    results = {i["id"]: classify_incident_report(i["id"], i["raw_text"]) for i in incidents}
 
-    print("=== Auditoría del Motor de Triaje (`src/triage_rules.py`) ===")
-    print(f"{'ID':<9} | {'Sev':<3} | {'Componente':<18} | {'Equipo':<13} | Clave de duplicado")
-    print("-" * 95)
-    for r in results.values():
-        print(
-            f"{r.incident_id:<9} | {r.severity:<3} | {r.component:<18} | "
-            f"{r.recommended_team:<13} | {r.duplicate_group_key}"
-        )
-    print("-" * 95)
-
-    for iid, (sev, comp, team) in EXPECTED.items():
-        r = results[iid]
-        assert (r.severity, r.component, r.recommended_team) == (sev, comp, team), (
-            f"{iid}: obtenido {(r.severity, r.component, r.recommended_team)}, "
-            f"esperado {(sev, comp, team)}"
-        )
-    for a, b in EXPECTED_DUPLICATES:
-        assert results[a].duplicate_group_key == results[b].duplicate_group_key, (a, b)
-    keys = [r.duplicate_group_key for r in results.values()]
-    assert len(set(keys)) == len(keys) - len(EXPECTED_DUPLICATES), "Hay duplicados no esperados"
-    print("OK: 10/10 incidentes correctos; duplicados detectados:", EXPECTED_DUPLICATES)
+    print("=== Auditoría del Motor de Triaje Actual (`src/triage_rules.py`) ===")
+    print(f"{'ID':<10} | {'Sev.':<5} | {'Componente':<20} | {'Extracto del Reporte'}")
+    print("-" * 88)
+    for item in incidents:
+        result = classify_incident_report(item["id"], item["raw_text"])
+        snippet = item["raw_text"][:45] + "..." if len(item["raw_text"]) > 45 else item["raw_text"]
+        print(f"{result.incident_id:<10} | {result.severity:<5} | {result.component:<20} | {snippet}")
+    print("-" * 88)
+    print(
+        "Observa los problemas en la salida actual:\n"
+        "  - INC-1002 (cuenta individual bloqueada) y INC-1009 (exportación Excel lenta)\n"
+        "    se clasifican como P0 solo porque el usuario escribió la palabra 'hoy'.\n"
+        "  - INC-1007 (fuga crítica de facturas entre empresas por company_id en URL)\n"
+        "    se clasifica como P3 porque no contiene las palabras 'urgente' ni '502'."
+    )
 
 
 if __name__ == "__main__":
