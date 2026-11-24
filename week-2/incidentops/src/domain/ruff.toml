@@ -1,0 +1,15 @@
+# Frontera del dominio (ADR-003): solo biblioteca estándar y el propio src.domain.
+extend = "../../pyproject.toml"
+
+[lint.flake8-tidy-imports]
+ban-relative-imports = "parents"
+
+[lint.flake8-tidy-imports.banned-api]
+"fastapi".msg = "El dominio no conoce HTTP (ADR-003)."
+"starlette".msg = "El dominio no conoce HTTP (ADR-003)."
+"pydantic".msg = "El dominio usa dataclasses de la stdlib, no Pydantic (ADR-003)."
+"typer".msg = "El dominio no conoce la CLI (ADR-003)."
+"sqlite3".msg = "El dominio no conoce la persistencia (ADR-003)."
+"psycopg".msg = "El dominio no conoce la persistencia (ADR-003)."
+"src.application".msg = "El dominio no depende de la capa de aplicación (ADR-003)."
+"src.adapters".msg = "El dominio no depende de adaptadores (ADR-003)."

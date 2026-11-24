@@ -1,0 +1,14 @@
+# Frontera de adaptadores primarios (ADR-003): delegan en IncidentService; nunca tocan drivers
+# ni repositorios concretos (usan src.adapters.outbound.factory).
+extend = "../../../pyproject.toml"
+
+[lint.flake8-tidy-imports]
+ban-relative-imports = "parents"
+
+[lint.flake8-tidy-imports.banned-api]
+"sqlite3".msg = "Usa IncidentService + factory; no drivers de BD en adaptadores primarios."
+"psycopg".msg = "Usa IncidentService + factory; no drivers de BD en adaptadores primarios."
+"src.adapters.outbound.sqlite_repository".msg = "Obtén el repositorio con src.adapters.outbound.factory."
+"src.adapters.outbound.postgres_repository".msg = "Obtén el repositorio con src.adapters.outbound.factory."
+"src.domain.triage_rules".msg = "Las reglas de negocio se invocan vía IncidentService."
+"src.domain.sla_calculator".msg = "Las reglas de negocio se invocan vía IncidentService."

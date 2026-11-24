@@ -24,3 +24,21 @@ class TriageResponse(BaseModel):
     duplicate_group_key: str
     rationale: str
     consistency_ratio: float
+
+
+class ActiveIncidentItem(BaseModel):
+    incident_id: str
+    title: str
+    component: str
+    severity: str
+    status: str
+    elapsed_minutes: int
+    allowed_minutes: int
+    is_breached: bool
+    requires_escalation: bool
+
+
+class ActiveIncidentsSummaryResponse(BaseModel):
+    total_active: int
+    breached_count: int
+    incidents: list[ActiveIncidentItem]
