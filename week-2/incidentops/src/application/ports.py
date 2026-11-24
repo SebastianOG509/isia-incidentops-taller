@@ -17,6 +17,16 @@ class IncidentRepositoryPort(Protocol):
         """Inserta o actualiza un incidente (upsert por `incident_id`)."""
         ...
 
+    def get_incident(self, incident_id: str) -> Optional[Incident]:
+        """Devuelve el incidente o `None` si no existe."""
+        ...
+
+    def find_open_duplicates(
+        self, duplicate_group_key: str, exclude_incident_id: Optional[str] = None
+    ) -> list[Incident]:
+        """Incidentes abiertos (`OPEN_STATUSES`) con la misma clave, excluyendo un ID."""
+        ...
+
     def list_active_incidents(self, component: Optional[str] = None) -> list[Incident]:
         """Incidentes `OPEN`/`IN_PROGRESS`, opcionalmente filtrados por componente."""
         ...

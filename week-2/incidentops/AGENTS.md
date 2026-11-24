@@ -32,6 +32,8 @@ uv run python -m src.domain.triage_rules          # auditoría 10/10 del triaje
 uv run python -m src.domain.sla_calculator        # verificación determinista ADR-002
 uv run python -m src.adapters.inbound.cli triage --incident-id INC-1001 --raw-text "..."
 uv run python -m src.adapters.inbound.cli summary [--component X] [--reference-time ISO]
+uv run python -m src.adapters.inbound.cli create --title "..." --raw-text "..." [--incident-id] [--created-at] [--status]
+uv run python -m src.adapters.inbound.cli sla INC-XXXXXXXX [--reference-time ISO]
 uv run uvicorn src.adapters.inbound.api.app:app --reload   # API en http://localhost:8000/docs
 ```
 
@@ -45,4 +47,4 @@ uv run uvicorn src.adapters.inbound.api.app:app --reload   # API en http://local
 6. Flujo de cada hito: `/speckit.specify → clarify → plan → tasks → analyze → implement`.
 
 Variables de entorno: `DATABASE_URL` (por defecto `sqlite:///:memory:`; usa `sqlite:///incidentops.db`
-para que la CLI conserve datos entre invocaciones).
+para que la CLI conserve datos entre invocaciones). Las horas con zona se normalizan a hora local UTC-05:00.

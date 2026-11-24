@@ -9,12 +9,20 @@ from fastapi import FastAPI, HTTPException
 
 from src.adapters.inbound.api.schemas import (
     ActiveIncidentsSummaryResponse,
+    CreateIncidentRequest,
+    IncidentCreatedResponse,
+    SLAEvaluationResponse,
     TriageRequest,
     TriageResponse,
 )
-from src.adapters.inbound.presenters import summary_to_dict
+from src.adapters.inbound.presenters import registration_to_dict, sla_to_dict, summary_to_dict
 from src.adapters.outbound.factory import create_repository
-from src.application.services import IncidentService, ValidationError
+from src.application.services import (
+    IncidentAlreadyExistsError,
+    IncidentNotFoundError,
+    IncidentService,
+    ValidationError,
+)
 
 
 def build_default_service() -> IncidentService:
@@ -39,6 +47,43 @@ def create_app(service: Optional[IncidentService] = None) -> FastAPI:
     ) -> ActiveIncidentsSummaryResponse:
         result = service.get_active_incidents_summary(component, reference_time)
         return ActiveIncidentsSummaryResponse(**summary_to_dict(result))
+
+    @app.post(
+        "/api/v1/incidents",
+        response_model=IncidentCreatedResponse,
+        status_code=201,
+        responses={409: {"description": "El incidente ya existe"}},
+    )
+    def create_incident(request: CreateIncidentRequest) -> IncidentCreatedResponse:
+        try:
+            registration = service.create_incident(
+                title=request.title,
+                raw_text=request.raw_text,
+                incident_id=request.incident_id,
+                created_at=request.created_at,
+                status=request.status,
+            )
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except IncidentAlreadyExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return IncidentCreatedResponse(**registration_to_dict(registration))
+
+    @app.get(
+        "/api/v1/incidents/{incident_id}/sla",
+        response_model=SLAEvaluationResponse,
+        responses={404: {"description": "El incidente no existe"}},
+    )
+    def incident_sla(
+        incident_id: str, reference_time: Optional[datetime] = None
+    ) -> SLAEvaluationResponse:
+        try:
+            evaluation = service.evaluate_incident_sla(incident_id, reference_time)
+        except IncidentNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return SLAEvaluationResponse(**sla_to_dict(evaluation))
 
     return app
 

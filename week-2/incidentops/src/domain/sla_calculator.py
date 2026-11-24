@@ -7,12 +7,14 @@ Implementa la decisión del ADR-002 (docs/adr/002-calculo-sla-horario-habil.md):
 - Un incidente abierto (`status != "RESOLVED"` y `resolved_at is None`) requiere
   escalamiento cuando alcanza el umbral preventivo, incluso si ya incumplió el SLA.
 
-Supuestos: `datetime` naive en una sola zona horaria; festivos fuera de alcance.
+Normalización temporal (Hito 003): toda marca con zona horaria se convierte a la hora local de
+operación (`BUSINESS_TZ`, UTC-05:00 fija, Colombia sin horario de verano) y se trata como naive;
+las marcas naive se asumen ya en hora local. Festivos fuera de alcance.
 Solo usa la biblioteca estándar y el resultado es determinista.
 """
 
-from datetime import datetime, time, timedelta
-from typing import Dict
+from datetime import datetime, time, timedelta, timezone
+from typing import Dict, Optional
 
 from src.domain.models import Incident, SLAEvaluation, SLARule, SeverityLevel
 
@@ -25,6 +27,19 @@ SLA_POLICY_TABLE: Dict[SeverityLevel, SLARule] = {
 
 BUSINESS_DAY_START = time(8, 0)
 BUSINESS_DAY_END = time(18, 0)
+BUSINESS_TZ = timezone(timedelta(hours=-5), name="America/Bogota")
+
+
+def normalize_timestamp(value: Optional[datetime]) -> Optional[datetime]:
+    """Convierte una marca aware a hora local naive de `BUSINESS_TZ`; deja intactas las naive."""
+    if value is None or value.tzinfo is None:
+        return value
+    return value.astimezone(BUSINESS_TZ).replace(tzinfo=None)
+
+
+def now_local() -> datetime:
+    """Instante actual en hora local de operación (naive), independiente del reloj del host."""
+    return normalize_timestamp(datetime.now(timezone.utc))
 
 
 def get_sla_rule_for_severity(severity: SeverityLevel) -> SLARule:
@@ -86,16 +101,17 @@ def evaluate_sla_status(incident: Incident, reference_time: datetime) -> SLAEval
         y banderas de estado.
     """
     rule = get_sla_rule_for_severity(incident.severity)
-    end_time = incident.resolved_at or reference_time
+    created_at = normalize_timestamp(incident.created_at)
+    end_time = normalize_timestamp(incident.resolved_at or reference_time)
 
-    if end_time < incident.created_at:
+    if end_time < created_at:
         raise ValueError("El tiempo de referencia no puede ser anterior a la creación.")
 
     if rule.operates_24x7:
-        delta_seconds = (end_time - incident.created_at).total_seconds()
+        delta_seconds = (end_time - created_at).total_seconds()
         elapsed_minutes = int(delta_seconds // 60)
     else:
-        elapsed_minutes = _business_minutes_between(incident.created_at, end_time)
+        elapsed_minutes = _business_minutes_between(created_at, end_time)
 
     remaining_minutes = rule.max_resolution_minutes - elapsed_minutes
     is_breached = elapsed_minutes > rule.max_resolution_minutes

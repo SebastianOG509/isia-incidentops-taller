@@ -8,6 +8,10 @@ SeverityLevel = Literal["P0", "P1", "P2", "P3"]
 IncidentStatus = Literal["OPEN", "IN_PROGRESS", "ESCALATION_REQUIRED", "RESOLVED"]
 TeamName = Literal["Backend-Core", "Platform-SRE", "Data-DBA", "Security-IAM"]
 
+INCIDENT_STATUSES: tuple[str, ...] = ("OPEN", "IN_PROGRESS", "ESCALATION_REQUIRED", "RESOLVED")
+# Estados "abiertos" para la detección de duplicados (Hito 003).
+OPEN_STATUSES: tuple[str, ...] = ("OPEN", "IN_PROGRESS", "ESCALATION_REQUIRED")
+
 
 @dataclass(frozen=True)
 class SLARule:
@@ -30,6 +34,8 @@ class Incident:
     status: IncidentStatus
     created_at: datetime
     resolved_at: Optional[datetime] = None
+    recommended_team: Optional[TeamName] = None
+    duplicate_group_key: Optional[str] = None
 
 
 @dataclass(frozen=True)

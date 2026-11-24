@@ -1,6 +1,9 @@
 """Serialización compartida por los adaptadores primarios (garantiza paridad REST/CLI)."""
 
-from src.application.services import ActiveIncidentsSummary
+from dataclasses import asdict
+
+from src.application.services import ActiveIncidentsSummary, IncidentRegistration
+from src.domain.models import SLAEvaluation
 
 
 def summary_to_dict(summary: ActiveIncidentsSummary) -> dict:
@@ -22,3 +25,24 @@ def summary_to_dict(summary: ActiveIncidentsSummary) -> dict:
             for item in summary.incidents
         ],
     }
+
+
+def registration_to_dict(registration: IncidentRegistration) -> dict:
+    incident, triage = registration.incident, registration.triage
+    return {
+        "incident_id": incident.incident_id,
+        "title": incident.title,
+        "status": incident.status,
+        "created_at": incident.created_at.isoformat(),
+        "severity": triage.severity,
+        "component": triage.component,
+        "recommended_team": triage.recommended_team,
+        "duplicate_group_key": triage.duplicate_group_key,
+        "rationale": triage.rationale,
+        "is_duplicate": registration.is_duplicate,
+        "duplicate_of": list(registration.duplicate_of),
+    }
+
+
+def sla_to_dict(evaluation: SLAEvaluation) -> dict:
+    return asdict(evaluation)

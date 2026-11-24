@@ -8,9 +8,14 @@ from typing import Optional
 
 import typer
 
-from src.adapters.inbound.presenters import summary_to_dict
+from src.adapters.inbound.presenters import registration_to_dict, sla_to_dict, summary_to_dict
 from src.adapters.outbound.factory import create_repository
-from src.application.services import IncidentService, ValidationError
+from src.application.services import (
+    IncidentAlreadyExistsError,
+    IncidentNotFoundError,
+    IncidentService,
+    ValidationError,
+)
 
 app = typer.Typer(help="IncidentOps CLI", no_args_is_help=True)
 
@@ -61,6 +66,46 @@ def summary(
     reference = _parse_datetime(reference_time, "--reference-time")
     result = _service().get_active_incidents_summary(component, reference)
     _emit(summary_to_dict(result))
+
+
+@app.command()
+def create(
+    title: str = typer.Option(..., "--title", help="Título del incidente"),
+    raw_text: str = typer.Option(..., "--raw-text", help="Texto libre del reporte"),
+    incident_id: Optional[str] = typer.Option(
+        None, "--incident-id", help="Identificador (por defecto INC-<HEX8>)"
+    ),
+    created_at: Optional[str] = typer.Option(
+        None, "--created-at", help="Creación ISO 8601 (por defecto: ahora)"
+    ),
+    status: str = typer.Option("OPEN", "--status", help="Estado inicial"),
+) -> None:
+    """Registra un incidente clasificado e informa si duplica uno abierto."""
+    created = _parse_datetime(created_at, "--created-at")
+    try:
+        registration = _service().create_incident(
+            title=title, raw_text=raw_text, incident_id=incident_id,
+            created_at=created, status=status,
+        )
+    except (ValidationError, IncidentAlreadyExistsError) as exc:
+        _fail(str(exc))
+    _emit(registration_to_dict(registration))
+
+
+@app.command()
+def sla(
+    incident_id: str = typer.Argument(..., help="Identificador del incidente"),
+    reference_time: Optional[str] = typer.Option(
+        None, "--reference-time", help="Instante ISO 8601 de evaluación (por defecto: ahora)"
+    ),
+) -> None:
+    """Audita el SLA de un incidente registrado."""
+    reference = _parse_datetime(reference_time, "--reference-time")
+    try:
+        evaluation = _service().evaluate_incident_sla(incident_id, reference)
+    except (IncidentNotFoundError, ValidationError) as exc:
+        _fail(str(exc))
+    _emit(sla_to_dict(evaluation))
 
 
 @app.callback()
