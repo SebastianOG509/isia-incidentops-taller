@@ -157,3 +157,9 @@ class SQLiteIncidentRepository:
             params.append(component)
         sql += " ORDER BY i.created_at, i.incident_id"
         return [self._row_to_incident(row) for row in self.conn.execute(sql, params)]
+
+    def check_health(self) -> bool:
+        try:
+            return self.conn.execute("SELECT 1").fetchone()[0] == 1
+        except sqlite3.Error:
+            return False

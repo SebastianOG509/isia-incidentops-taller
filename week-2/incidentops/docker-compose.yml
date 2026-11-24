@@ -1,0 +1,43 @@
+# Topología de runtime de IncidentOps (ADR-004): api + db en 2 contenedores.
+# Credenciales de ejemplo solo para entorno local; en producción se inyectan desde fuera del repo.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: incidentops
+      POSTGRES_PASSWORD: incidentops
+      POSTGRES_DB: incidentops
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U incidentops -d incidentops"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://incidentops:incidentops@db:5432/incidentops
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  pgdata:

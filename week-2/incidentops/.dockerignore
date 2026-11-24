@@ -1,0 +1,29 @@
+# Entornos y cachés locales
+.venv/
+venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Bases de datos y secretos locales
+*.db
+*.sqlite3
+.env
+
+# Control de versiones, tooling de agentes y documentación (no se ejecutan en runtime)
+.git/
+.gitignore
+.specify/
+.opencode/
+.claude/
+.vscode/
+docs/
+specs/
+tests/
+*.md
+
+# Artefactos de orquestación
+Dockerfile
+.dockerignore
+docker-compose.yml

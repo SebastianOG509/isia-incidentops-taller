@@ -149,3 +149,11 @@ class IncidentService:
             return evaluate_sla_status(incident, reference_time or now_local())
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
+
+    # --- Hito 004 -----------------------------------------------------------------
+    def check_health(self) -> bool:
+        """Verifica conectividad real con la persistencia configurada."""
+        try:
+            return bool(self.repository.check_health())
+        except Exception:  # un fallo del adaptador nunca debe convertirse en un 500
+            return False

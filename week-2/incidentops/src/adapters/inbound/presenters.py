@@ -46,3 +46,9 @@ def registration_to_dict(registration: IncidentRegistration) -> dict:
 
 def sla_to_dict(evaluation: SLAEvaluation) -> dict:
     return asdict(evaluation)
+
+
+def health_to_dict(healthy: bool) -> dict:
+    if healthy:
+        return {"status": "ok", "database": "connected"}
+    return {"status": "error", "database": "unavailable"}

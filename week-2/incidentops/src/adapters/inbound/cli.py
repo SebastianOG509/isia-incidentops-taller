@@ -8,7 +8,12 @@ from typing import Optional
 
 import typer
 
-from src.adapters.inbound.presenters import registration_to_dict, sla_to_dict, summary_to_dict
+from src.adapters.inbound.presenters import (
+    health_to_dict,
+    registration_to_dict,
+    sla_to_dict,
+    summary_to_dict,
+)
 from src.adapters.outbound.factory import create_repository
 from src.application.services import (
     IncidentAlreadyExistsError,
@@ -106,6 +111,15 @@ def sla(
     except (IncidentNotFoundError, ValidationError) as exc:
         _fail(str(exc))
     _emit(sla_to_dict(evaluation))
+
+
+@app.command()
+def health() -> None:
+    """Chequeo real de conectividad con la base configurada (exit 0 sano / 1 no disponible)."""
+    healthy = _service().check_health()
+    _emit(health_to_dict(healthy))
+    if not healthy:
+        raise typer.Exit(code=1)
 
 
 @app.callback()

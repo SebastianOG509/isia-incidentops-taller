@@ -5,17 +5,23 @@ from dataclasses import asdict
 from datetime import datetime
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 
 from src.adapters.inbound.api.schemas import (
     ActiveIncidentsSummaryResponse,
     CreateIncidentRequest,
+    HealthResponse,
     IncidentCreatedResponse,
     SLAEvaluationResponse,
     TriageRequest,
     TriageResponse,
 )
-from src.adapters.inbound.presenters import registration_to_dict, sla_to_dict, summary_to_dict
+from src.adapters.inbound.presenters import (
+    health_to_dict,
+    registration_to_dict,
+    sla_to_dict,
+    summary_to_dict,
+)
 from src.adapters.outbound.factory import create_repository
 from src.application.services import (
     IncidentAlreadyExistsError,
@@ -84,6 +90,17 @@ def create_app(service: Optional[IncidentService] = None) -> FastAPI:
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return SLAEvaluationResponse(**sla_to_dict(evaluation))
+
+    @app.get(
+        "/health",
+        response_model=HealthResponse,
+        responses={503: {"model": HealthResponse, "description": "Base de datos no disponible"}},
+    )
+    def health(response: Response) -> HealthResponse:
+        healthy = service.check_health()
+        if not healthy:
+            response.status_code = 503
+        return HealthResponse(**health_to_dict(healthy))
 
     return app
 

@@ -30,3 +30,7 @@ class IncidentRepositoryPort(Protocol):
     def list_active_incidents(self, component: Optional[str] = None) -> list[Incident]:
         """Incidentes `OPEN`/`IN_PROGRESS`, opcionalmente filtrados por componente."""
         ...
+
+    def check_health(self) -> bool:
+        """Ejecuta una consulta real (`SELECT 1`); `False` ante cualquier fallo de conectividad."""
+        ...

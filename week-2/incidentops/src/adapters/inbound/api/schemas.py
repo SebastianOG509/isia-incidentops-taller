@@ -87,3 +87,8 @@ class SLAEvaluationResponse(BaseModel):
     remaining_minutes: int
     is_breached: bool
     requires_escalation: bool
+
+
+class HealthResponse(BaseModel):
+    status: Literal["ok", "error"]
+    database: Literal["connected", "unavailable"]
