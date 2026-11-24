@@ -1,12 +1,10 @@
 <!--
 Sync Impact Report
-- Version change: (plantilla sin ratificar) → 1.0.0
-- Principios: I. Núcleo de Dominio Determinista Único; II. Arquitectura Hexagonal Estricta;
-  III. Paridad de Adaptadores Primarios; IV. Persistencia Intercambiable sin ORM;
-  V. Especificación BDD y Verificación Determinista
-- Secciones añadidas: Restricciones Tecnológicas, Flujo de Desarrollo, Governance
-- Secciones eliminadas: ninguna
-- Fuentes: docs/constitution.md, docs/adr/001, docs/adr/002, docs/adr/003
+- Version change: 1.0.0 → 1.1.0 (MINOR: principio IV ampliado por ADR-004)
+- Principios modificados: IV. Persistencia Intercambiable sin ORM → IV. Persistencia Dual SQLite/PostgreSQL sin ORM
+- Secciones modificadas: Restricciones Tecnológicas (+ psycopg[binary], Docker Compose)
+- Secciones añadidas / eliminadas: ninguna
+- Fuentes: docs/adr/004-persistencia-postgresql-y-runtime-contenedores.md (reemplaza parcialmente ADR-001)
 - TODOs diferidos: ninguno
 -->
 # IncidentOps Constitution
@@ -48,12 +46,18 @@ Toda capacidad expuesta por REST MUST existir también en la CLI (y viceversa), 
 método de `IncidentService`, con la misma validación y semántica de error
 (`422` en REST ⇔ código de salida `1` en CLI; `404` ⇔ código `1`).
 
-### IV. Persistencia Intercambiable sin ORM
+### IV. Persistencia Dual SQLite/PostgreSQL sin ORM (ADR-004)
 
-La persistencia usa SQL explícito y parametrizado, sin ORMs. El motor vigente es `sqlite3` de la
-biblioteca estándar (ADR-001), con `sqlite:///:memory:` como valor por defecto para pruebas.
-Cambiar o añadir un motor de BD MUST estar precedido por un ADR aceptado y una enmienda de esta
-Constitución.
+La persistencia usa SQL explícito y parametrizado, **sin ORMs**. Hay dos adaptadores secundarios que
+MUST cumplir el mismo `IncidentRepositoryPort` (incluido `check_health()`):
+- **SQLite** (`sqlite3` estándar): desarrollo local y pruebas; `sqlite:///:memory:` por defecto.
+- **PostgreSQL** (`psycopg[binary]`, `dict_row`, parámetros `%s`, `INSERT ... ON CONFLICT DO UPDATE`):
+  producción en contenedores.
+
+El adaptador se elige **solo** en `src.adapters.outbound.factory.create_repository(DATABASE_URL)`:
+`postgresql://...` → PostgreSQL; `sqlite:///...` o variable ausente → SQLite. Las marcas de tiempo se
+guardan como texto ISO 8601 en hora local de operación en ambos motores (paridad temporal). Añadir otro
+motor MUST estar precedido por un ADR aceptado y una enmienda de esta Constitución.
 
 ### V. Especificación BDD y Verificación Determinista (NON-NEGOTIABLE)
 
@@ -66,6 +70,9 @@ Ninguna tarea se considera terminada si `uv run ruff check src/` o `uv run pytes
 
 - Python `>=3.10` gestionado exclusivamente con `uv` (`uv add`, `uv run`, `uv.lock` versionado).
 - REST: FastAPI + Pydantic v2. CLI: Typer. Pruebas: pytest + httpx. Análisis estático: Ruff.
+- Driver PostgreSQL: `psycopg[binary]` (ADR-004); su import solo se permite en `src/adapters/outbound/`.
+- Runtime de producción: Docker Compose con servicios `api` (`python:3.12-slim` + `uv`) y `db`
+  (`postgres:16-alpine`, volumen persistente); la suite de pruebas MUST seguir ejecutándose sin Docker.
 - Toda dependencia nueva MUST estar justificada por un spec, plan o ADR aprobado.
 
 ## Flujo de Desarrollo
@@ -84,4 +91,4 @@ de principios; MINOR: principio o sección nuevos o ampliados; PATCH: redacción
 `plan.md` vigentes. Cada `/speckit.plan` y `/speckit.analyze` MUST verificar el cumplimiento de
 estos principios. La guía operativa del agente está en `AGENTS.md`.
 
-**Version**: 1.0.0 | **Ratified**: 2026-11-24 | **Last Amended**: 2026-11-24
+**Version**: 1.1.0 | **Ratified**: 2026-11-24 | **Last Amended**: 2026-11-24

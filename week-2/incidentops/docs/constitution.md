@@ -28,7 +28,10 @@ están justificadas en `docs/adr/`; cambiarlas exige primero un ADR nuevo.
 
 - Python `>=3.10` gestionado exclusivamente con `uv`.
 - API REST con **FastAPI + Pydantic v2**; CLI con **Typer**.
-- Persistencia con **`sqlite3` estándar, sin ORMs** (ADR-001). Cualquier cambio de motor de BD requiere su propio ADR previo.
+- Persistencia **sin ORMs**: `sqlite3` estándar para desarrollo/pruebas y PostgreSQL vía `psycopg[binary]`
+  en producción, seleccionados por `DATABASE_URL` (ADR-004, que reemplaza parcialmente ADR-001).
+  Cualquier otro motor requiere su propio ADR previo. La Constitución oficial vigente es
+  `.specify/memory/constitution.md`.
 - Toda funcionalidad nace de una especificación BDD (`Given / When / Then`) en lenguaje de negocio, y cada
   escenario tiene una prueba de aceptación automatizada con `pytest` (`uv run pytest -v`).
 - No se agregan dependencias sin que un artefacto aprobado (spec, plan o ADR) lo justifique.
